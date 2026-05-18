@@ -1,0 +1,16 @@
+{
+  "name": "Kean Limassol",
+  "short_name": "Kean",
+  "description": "Premium beachfront mixed-use property in Limassol, Cyprus.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#10100f",
+  "icons": [
+    {
+      "src": "assets/kean-logo-black.webp",
+      "sizes": "118x40",
+      "type": "image/webp"
+    }
+  ]
+}
