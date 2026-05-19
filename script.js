@@ -827,6 +827,81 @@ function showFieldError(field, status, message) {
   if (status) status.textContent = message;
 }
 
+function getTrackingParams() {
+  const params = new URLSearchParams(window.location.search);
+  const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_referrer", "gclid", "yclid", "fbclid"];
+  return keys
+    .map((key) => [key, params.get(key)])
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key}: ${value}`);
+}
+
+function submitLeadToAmo(lead) {
+  const formId = document.body.dataset.amoFormId;
+  const formHash = document.body.dataset.amoFormHash;
+  if (!formId || !formHash) return Promise.reject(new Error("amoCRM form is not configured"));
+
+  return new Promise((resolve) => {
+    const frameName = "kean-amo-lead-frame";
+    let frame = document.querySelector(`iframe[name="${frameName}"]`);
+
+    if (!frame) {
+      frame = document.createElement("iframe");
+      frame.name = frameName;
+      frame.title = "amoCRM lead transport";
+      frame.style.display = "none";
+      document.body.append(frame);
+    }
+
+    const amoForm = document.createElement("form");
+    amoForm.method = "POST";
+    amoForm.action = "https://forms.amocrm.ru/queue/add";
+    amoForm.enctype = "multipart/form-data";
+    amoForm.target = frameName;
+    amoForm.style.display = "none";
+
+    const addField = (name, value) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value || "";
+      amoForm.append(input);
+    };
+
+    const note = [
+      lead.interest ? `Цель: ${lead.interest}` : "",
+      lead.message ? `Комментарий: ${lead.message}` : "",
+      lead.page ? `Страница: ${lead.page}` : "",
+      lead.source ? `Источник: ${lead.source}` : "",
+      ...getTrackingParams()
+    ].filter(Boolean).join("\n");
+
+    addField("form_id", formId);
+    addField("hash", formHash);
+    addField("user_origin", JSON.stringify({
+      datetime: `${new Date().toDateString()} ${new Date().toTimeString()}`,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      referer: document.referrer || ""
+    }));
+    addField("fields[name_1]", lead.name);
+    addField("fields[984859_1][553087]", lead.phone);
+    addField("fields[note_2]", note);
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      amoForm.remove();
+      resolve();
+    };
+
+    frame.addEventListener("load", finish, { once: true });
+    document.body.append(amoForm);
+    amoForm.submit();
+    window.setTimeout(finish, 2500);
+  });
+}
+
 function setHeaderState() {
   if (!header) return;
   header.classList.toggle("is-scrolled", window.scrollY > 16);
@@ -951,6 +1026,7 @@ leadForms.forEach((leadForm) => {
     const phoneInput = leadForm.querySelector('input[type="tel"][name="phone"]');
     const interestInput = leadForm.querySelector("[name='interest']");
     const endpoint = document.body.dataset.leadEndpoint;
+    const hasAmoForm = Boolean(document.body.dataset.amoFormId && document.body.dataset.amoFormHash);
     const data = Object.fromEntries(new FormData(leadForm).entries());
     data.name = String(data.name || "").trim();
     data.phone = String(data.phone || "").trim();
@@ -999,6 +1075,8 @@ leadForms.forEach((leadForm) => {
           body: JSON.stringify(lead)
         });
         if (!response.ok) throw new Error("Lead endpoint failed");
+      } else if (hasAmoForm) {
+        await submitLeadToAmo(lead);
       } else {
         const savedLeads = JSON.parse(localStorage.getItem("keanLeads") || "[]");
         savedLeads.push(lead);
@@ -1008,7 +1086,7 @@ leadForms.forEach((leadForm) => {
 
       leadForm.reset();
       if (status) {
-        if (endpoint) {
+        if (endpoint || hasAmoForm) {
           status.textContent = getMessage("successEndpoint");
         } else {
           status.innerHTML = `${getMessage("successWhatsApp")} <a href="${whatsappUrl}" target="_blank" rel="noopener">${getMessage("successWhatsAppLink")}</a>.`;
