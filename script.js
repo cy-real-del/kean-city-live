@@ -1,3 +1,5 @@
+const YANDEX_METRICA_ID = 109324730;
+const TRACKING_STORAGE_KEY = "keanTrackingParams";
 const header = document.querySelector("[data-header]");
 const menuButton = document.querySelector("[data-menu-button]");
 const mobileMenu = document.querySelector("[data-mobile-menu]");
@@ -15,6 +17,46 @@ const mobileScenarioQuery = window.matchMedia("(max-width: 820px)");
 const LANGUAGE_STORAGE_KEY = "keanLanguage";
 const languageHeader = document.querySelector(".site-header");
 let successPopupTimer;
+let scroll75Tracked = false;
+
+function initYandexMetrika() {
+  if (!YANDEX_METRICA_ID || window.__keanMetrikaInitialized) return;
+  window.__keanMetrikaInitialized = true;
+  window.dataLayer = window.dataLayer || [];
+
+  (function(m, e, t, r, i, k, a) {
+    m[i] = m[i] || function() {
+      (m[i].a = m[i].a || []).push(arguments);
+    };
+    m[i].l = 1 * new Date();
+    for (let j = 0; j < e.scripts.length; j += 1) {
+      if (e.scripts[j].src === r) return;
+    }
+    k = e.createElement(t);
+    a = e.getElementsByTagName(t)[0];
+    k.async = 1;
+    k.src = r;
+    a.parentNode.insertBefore(k, a);
+  })(window, document, "script", `https://mc.yandex.ru/metrika/tag.js?id=${YANDEX_METRICA_ID}`, "ym");
+
+  window.ym(YANDEX_METRICA_ID, "init", {
+    ssr: true,
+    webvisor: true,
+    clickmap: true,
+    ecommerce: "dataLayer",
+    referrer: document.referrer,
+    url: window.location.href,
+    accurateTrackBounce: true,
+    trackLinks: true
+  });
+}
+
+function trackMetrikaGoal(goal, params = {}) {
+  if (typeof window.ym !== "function") return;
+  window.ym(YANDEX_METRICA_ID, "reachGoal", goal, params);
+}
+
+initYandexMetrika();
 
 const textTranslations = {
   en: {
@@ -849,14 +891,49 @@ function showFieldError(field, status, message) {
   if (status) status.textContent = message;
 }
 
-function getTrackingParams() {
+function readTrackingParamsFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_referrer", "gclid", "yclid", "fbclid"];
-  return keys
-    .map((key) => [key, params.get(key)])
-    .filter(([, value]) => value)
-    .map(([key, value]) => `${key}: ${value}`);
+  return Object.fromEntries(
+    keys
+      .map((key) => [key, params.get(key)])
+      .filter(([, value]) => value)
+  );
 }
+
+function readStoredTrackingParams() {
+  try {
+    return JSON.parse(sessionStorage.getItem(TRACKING_STORAGE_KEY) || "{}");
+  } catch (error) {
+    return {};
+  }
+}
+
+function persistTrackingParams() {
+  const currentParams = readTrackingParamsFromUrl();
+  if (!Object.keys(currentParams).length) return;
+  try {
+    sessionStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify({
+      ...readStoredTrackingParams(),
+      ...currentParams
+    }));
+  } catch (error) {
+    // Storage can be unavailable in private modes.
+  }
+}
+
+function getTrackingParamsObject() {
+  return {
+    ...readStoredTrackingParams(),
+    ...readTrackingParamsFromUrl()
+  };
+}
+
+function getTrackingParams() {
+  return Object.entries(getTrackingParamsObject()).map(([key, value]) => `${key}: ${value}`);
+}
+
+persistTrackingParams();
 
 function submitLeadToAmo(lead) {
   const formId = document.body.dataset.amoFormId;
@@ -929,8 +1006,22 @@ function setHeaderState() {
   header.classList.toggle("is-scrolled", window.scrollY > 16);
 }
 
+function trackScrollDepth() {
+  if (scroll75Tracked) return;
+  const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
+  if (scrollableHeight <= 0) return;
+  const scrollProgress = (window.scrollY + window.innerHeight) / document.documentElement.scrollHeight;
+  if (scrollProgress >= 0.75) {
+    scroll75Tracked = true;
+    trackMetrikaGoal("scroll_75", {
+      page: window.location.pathname
+    });
+  }
+}
+
 setHeaderState();
 window.addEventListener("scroll", setHeaderState, { passive: true });
+window.addEventListener("scroll", trackScrollDepth, { passive: true });
 
 function openModal() {
   if (!modal) return;
@@ -949,12 +1040,54 @@ function closeModal() {
 modalOpeners.forEach((opener) => {
   opener.addEventListener("click", (event) => {
     event.preventDefault();
+    trackMetrikaGoal("lead_form_open", {
+      text: opener.textContent.trim(),
+      page: window.location.pathname
+    });
     openModal();
   });
 });
 
 modalClosers.forEach((closer) => {
   closer.addEventListener("click", closeModal);
+});
+
+document.querySelectorAll('a[href="#mobile-lead"], a[href="#lead"]').forEach((link) => {
+  link.addEventListener("click", () => {
+    trackMetrikaGoal("lead_form_open", {
+      text: link.textContent.trim(),
+      page: window.location.pathname
+    });
+  });
+});
+
+document.querySelectorAll('a[href*="wa.me"]').forEach((link) => {
+  link.addEventListener("click", () => {
+    trackMetrikaGoal("whatsapp_click", {
+      text: link.textContent.trim(),
+      page: window.location.pathname
+    });
+  });
+});
+
+document.querySelectorAll('a[href*="t.me"]').forEach((link) => {
+  link.addEventListener("click", () => {
+    trackMetrikaGoal("telegram_click", {
+      text: link.textContent.trim(),
+      page: window.location.pathname
+    });
+  });
+});
+
+document.querySelectorAll("video").forEach((video, index) => {
+  video.addEventListener("play", () => {
+    const source = video.querySelector("source")?.src || "";
+    trackMetrikaGoal("video_view", {
+      index: index + 1,
+      source,
+      page: window.location.pathname
+    });
+  }, { once: true });
 });
 
 document.addEventListener("keydown", (event) => {
@@ -1106,6 +1239,12 @@ leadForms.forEach((leadForm) => {
         window.open(whatsappUrl, "_blank", "noopener");
       }
 
+      trackMetrikaGoal("lead_submit", {
+        interest: data.interest,
+        form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+        page: window.location.pathname,
+        ...getTrackingParamsObject()
+      });
       leadForm.reset();
       if (endpoint || hasAmoForm) {
         if (leadForm.closest("[data-modal]")) closeModal();
