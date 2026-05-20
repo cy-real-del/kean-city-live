@@ -1367,6 +1367,45 @@ body.modal-open {
   cursor: pointer;
 }
 
+.success-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.24s ease, visibility 0.24s ease;
+}
+
+.success-popup.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.success-popup__panel {
+  width: min(460px, 100%);
+  padding: clamp(26px, 5vw, 40px);
+  border: 1px solid rgba(199, 173, 126, 0.5);
+  background:
+    linear-gradient(135deg, rgba(238, 217, 171, 0.14), transparent 42%),
+    rgba(16, 16, 15, 0.94);
+  color: var(--paper);
+  text-align: center;
+  box-shadow: 0 28px 90px rgba(16, 16, 15, 0.36);
+  backdrop-filter: blur(14px);
+}
+
+.success-popup__panel p {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(29px, 4vw, 42px);
+  font-weight: 700;
+  line-height: 1.08;
+}
+
 @media (max-width: 1100px) {
   .desktop-nav {
     display: none;
@@ -1503,6 +1542,19 @@ body.modal-open {
 
   .modal {
     padding: 14px;
+  }
+
+  .success-popup {
+    align-items: end;
+    padding: 14px 14px calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .success-popup__panel {
+    padding: 24px 22px;
+  }
+
+  .success-popup__panel p {
+    font-size: 28px;
   }
 }
 

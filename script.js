@@ -5,6 +5,8 @@ const leadForms = document.querySelectorAll("[data-lead-form]");
 const modal = document.querySelector("[data-modal]");
 const modalOpeners = document.querySelectorAll("[data-modal-open]");
 const modalClosers = document.querySelectorAll("[data-modal-close]");
+const successPopup = document.querySelector("[data-success-popup]");
+const successPopupMessage = document.querySelector("[data-success-popup-message]");
 const phoneInputs = document.querySelectorAll('input[type="tel"][name="phone"]');
 const scenarioItems = document.querySelectorAll(".scenario-item");
 const mobileStickyCta = document.querySelector(".mobile-sticky-cta");
@@ -12,6 +14,7 @@ const stickyHideTargets = document.querySelectorAll("#mobile-lead, #lead");
 const mobileScenarioQuery = window.matchMedia("(max-width: 820px)");
 const LANGUAGE_STORAGE_KEY = "keanLanguage";
 const languageHeader = document.querySelector(".site-header");
+let successPopupTimer;
 
 const textTranslations = {
   en: {
@@ -614,6 +617,7 @@ const uiMessages = {
     commentLabel: "Комментарий",
     pageLabel: "Страница",
     successEndpoint: "Спасибо. Заявка отправлена, менеджер сможет связаться с вами по указанному контакту.",
+    successPopup: "Спасибо за заявку, мы оперативно с вами свяжемся",
     successWhatsApp: "Спасибо. Мы подготовили сообщение в WhatsApp. Если окно не открылось,",
     successWhatsAppLink: "нажмите здесь",
     failure: "Не удалось отправить заявку. Напишите в WhatsApp или Telegram, ссылки рядом с формой."
@@ -629,6 +633,7 @@ const uiMessages = {
     commentLabel: "Comment",
     pageLabel: "Page",
     successEndpoint: "Thank you. Your enquiry has been sent, and a manager can contact you using the details provided.",
+    successPopup: "Thank you for your enquiry. We will contact you shortly.",
     successWhatsApp: "Thank you. We prepared a WhatsApp message. If the window did not open,",
     successWhatsAppLink: "click here",
     failure: "The enquiry could not be sent. Please write via WhatsApp or Telegram using the links near the form."
@@ -771,6 +776,23 @@ function setLanguage(language, shouldPersist = true) {
 
 function getMessage(key) {
   return uiMessages[currentLanguage]?.[key] || uiMessages.ru[key];
+}
+
+function hideSuccessPopup() {
+  if (!successPopup) return;
+  successPopup.classList.remove("is-visible");
+  successPopup.setAttribute("aria-hidden", "true");
+}
+
+function showSuccessPopup() {
+  if (!successPopup) return;
+  if (successPopupMessage) {
+    successPopupMessage.textContent = getMessage("successPopup");
+  }
+  window.clearTimeout(successPopupTimer);
+  successPopup.classList.add("is-visible");
+  successPopup.setAttribute("aria-hidden", "false");
+  successPopupTimer = window.setTimeout(hideSuccessPopup, 4000);
 }
 
 function createLanguageSwitcher() {
@@ -1085,6 +1107,10 @@ leadForms.forEach((leadForm) => {
       }
 
       leadForm.reset();
+      if (endpoint || hasAmoForm) {
+        if (leadForm.closest("[data-modal]")) closeModal();
+        showSuccessPopup();
+      }
       if (status) {
         if (endpoint || hasAmoForm) {
           status.textContent = getMessage("successEndpoint");
