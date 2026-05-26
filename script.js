@@ -10,12 +10,17 @@ const modalClosers = document.querySelectorAll("[data-modal-close]");
 const successPopup = document.querySelector("[data-success-popup]");
 const successPopupMessage = document.querySelector("[data-success-popup-message]");
 const phoneInputs = document.querySelectorAll('input[type="tel"][name="phone"]');
+const whatsappLinks = document.querySelectorAll("[data-whatsapp-link]");
+const microGoalLinks = document.querySelectorAll("[data-micro-goal]");
+const interestGroups = document.querySelectorAll("[data-interest-group]");
 const scenarioItems = document.querySelectorAll(".scenario-item");
 const mobileStickyCta = document.querySelector(".mobile-sticky-cta");
 const stickyHideTargets = document.querySelectorAll("#mobile-lead, #lead");
 const mobileScenarioQuery = window.matchMedia("(max-width: 820px)");
 const LANGUAGE_STORAGE_KEY = "keanLanguage";
 const languageHeader = document.querySelector(".site-header");
+const formStartTracked = new WeakSet();
+const phoneStartTracked = new WeakSet();
 let successPopupTimer;
 let scroll75Tracked = false;
 
@@ -295,12 +300,32 @@ const metaTranslations = {
 
 Object.assign(textTranslations.en, {
   "Получить планировки и цены": "Get layouts and prices",
+  "Получить планировки и цены в WhatsApp": "Get layouts and prices on WhatsApp",
   "Сравнить Kean с проектами": "Compare Kean with other projects",
+  "Сравнить Kean с объектами Лимассола": "Compare Kean with Limassol properties",
+  "Ответим в WhatsApp / Telegram: доступные форматы, бюджет, платежный график, сравнение с альтернативами.": "We will reply on WhatsApp / Telegram with available formats, budget guidance, payment schedule and comparison with alternatives.",
+  "Что вы получите через 5 минут после заявки": "What you receive within 5 minutes of your request",
+  "Мы не отправляем “общий буклет”. Соберем короткое предложение под вашу цель и покажем, где Kean сильнее альтернатив в Лимассоле.": "We do not send a generic brochure. We prepare a short offer around your goal and show where Kean is stronger than Limassol alternatives.",
+  "Что входит в ответ после заявки": "What is included after the request",
+  "Планировки": "Layouts",
+  "Доступные форматы и позиции, которые стоит смотреть первыми.": "Available formats and positions worth reviewing first.",
+  "Ориентиры цен": "Price guidance",
+  "Понятный диапазон бюджета и входа в проект.": "A clear budget range and entry point for the project.",
+  "Платежный график": "Payment schedule",
+  "Как распределяются платежи и что уточнить до резерва.": "How payments are structured and what to clarify before reservation.",
+  "Сравнение": "Comparison",
+  "Kean против других премиальных проектов Лимассола.": "Kean versus other premium Limassol projects.",
+  "Цель покупки": "Purchase goal",
+  "Инвестиция, жизнь, ПМЖ, переезд или бизнес на Кипре.": "Investment, living, permanent residence, relocation or business in Cyprus.",
+  "Сравниваете Кипр с Дубаем, Испанией или Португалией?": "Comparing Cyprus with Dubai, Spain or Portugal?",
+  "Покажем различия по входу, налогам, ликвидности и логике переезда. Kean - премиальный проект именно в Лимассоле, поэтому сначала проверим, подходит ли Кипр под вашу задачу.": "We will show differences in entry budget, taxes, liquidity and relocation logic. Kean is a premium project specifically in Limassol, so we first check whether Cyprus fits your task.",
   "Отправим презентацию, актуальные форматы, ориентиры по бюджету и платежному графику в WhatsApp / Telegram.": "We will send the presentation, available formats, budget guidance and payment schedule references via WhatsApp / Telegram.",
   "Kean интересен не только как недвижимость у моря, а как редкий адрес: бывший участок KEAN, прибрежный Лимассол, Dasoudi, mixed-use формат и будущая узнаваемость объекта.": "Kean is compelling not only as seafront real estate, but as a rare address: the former KEAN site, coastal Limassol, Dasoudi, mixed-use format and future recognition of the project.",
   "Получить подборку редких позиций": "Get a selection of rare positions",
   "Получите планировки и цены по Kean": "Get Kean layouts and prices",
-  "Оставьте контакты, и мы отправим доступные форматы, ориентиры по бюджету и сценарии покупки.": "Leave your details and we will send available formats, budget guidance and purchase scenarios.",
+  "Оставьте контакты, и мы отправим доступные форматы, ориентиры по бюджету и цели покупки.": "Leave your details and we will send available formats, budget guidance and purchase goals.",
+  "Цель (необязательно)": "Goal (optional)",
+  "Бизнес": "Business",
   "После заявки": "After the request",
   "Что подготовит Top Estate": "What Top Estate will prepare",
   "Оставьте контакт, и вместо общей презентации мы соберем понятный пакет под ваш сценарий: инвестиция, жизнь у моря, ПМЖ, переезд или коллекционный портфель недвижимости.": "Leave your contact details, and instead of a generic presentation we will prepare a clear package for your scenario: investment, seafront living, permanent residence, relocation or a collectible property portfolio.",
@@ -806,6 +831,7 @@ function setLanguage(language, shouldPersist = true) {
   translateAttributes(currentLanguage);
   updateMeta(currentLanguage);
   updateLanguageSwitcher(currentLanguage);
+  updateWhatsAppLinks();
 
   if (shouldPersist) {
     try {
@@ -818,6 +844,20 @@ function setLanguage(language, shouldPersist = true) {
 
 function getMessage(key) {
   return uiMessages[currentLanguage]?.[key] || uiMessages.ru[key];
+}
+
+function getWhatsAppPrefillText() {
+  if (currentLanguage === "en") {
+    return "I want to receive Kean Limassol layouts and prices";
+  }
+  return "Хочу получить планировки и цены Kean Limassol";
+}
+
+function updateWhatsAppLinks() {
+  const message = encodeURIComponent(getWhatsAppPrefillText());
+  whatsappLinks.forEach((link) => {
+    link.href = `https://wa.me/35794537782?text=${message}`;
+  });
 }
 
 function hideSuccessPopup() {
@@ -889,6 +929,12 @@ function showFieldError(field, status, message) {
   field.setCustomValidity(message);
   field.reportValidity();
   if (status) status.textContent = message;
+  trackMetrikaGoal("form_error", {
+    field: field.name || field.getAttribute("aria-label") || "unknown",
+    message,
+    page: window.location.pathname,
+    ...getTrackingParamsObject()
+  });
 }
 
 function readTrackingParamsFromUrl() {
@@ -1052,6 +1098,17 @@ modalClosers.forEach((closer) => {
   closer.addEventListener("click", closeModal);
 });
 
+microGoalLinks.forEach((link) => {
+  link.addEventListener("click", () => {
+    trackMetrikaGoal(link.dataset.microGoal, {
+      text: link.textContent.trim(),
+      href: link.getAttribute("href") || "",
+      page: window.location.pathname,
+      ...getTrackingParamsObject()
+    });
+  });
+});
+
 document.querySelectorAll('a[href="#mobile-lead"], a[href="#lead"]').forEach((link) => {
   link.addEventListener("click", () => {
     trackMetrikaGoal("lead_form_open", {
@@ -1157,12 +1214,62 @@ if (menuButton && mobileMenu) {
 phoneInputs.forEach((input) => {
   input.addEventListener("focus", () => {
     if (!input.value) input.value = "+";
+    if (!phoneStartTracked.has(input)) {
+      phoneStartTracked.add(input);
+      trackMetrikaGoal("phone_input_start", {
+        form: input.closest(".modal-form") ? "modal" : input.closest(".quick-lead-form") ? "quick" : "section",
+        page: window.location.pathname,
+        ...getTrackingParamsObject()
+      });
+    }
   });
 
   input.addEventListener("input", () => {
     const nextValue = sanitizePhone(input.value);
     if (input.value !== nextValue) input.value = nextValue;
     input.setCustomValidity("");
+  });
+});
+
+leadForms.forEach((leadForm) => {
+  leadForm.addEventListener("focusin", () => {
+    if (formStartTracked.has(leadForm)) return;
+    formStartTracked.add(leadForm);
+    trackMetrikaGoal("form_start", {
+      form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+      page: window.location.pathname,
+      ...getTrackingParamsObject()
+    });
+  }, { once: true });
+});
+
+interestGroups.forEach((group) => {
+  const hiddenInput = group.querySelector('input[name="interest"]');
+  const choices = group.querySelectorAll("[data-interest-choice]");
+
+  choices.forEach((choice) => {
+    choice.setAttribute("aria-pressed", "false");
+    choice.addEventListener("click", () => {
+      const value = choice.dataset.interestChoice || choice.textContent.trim();
+      const isSelected = choice.classList.contains("is-selected");
+      choices.forEach((button) => {
+        button.classList.remove("is-selected");
+        button.setAttribute("aria-pressed", "false");
+      });
+
+      if (hiddenInput) hiddenInput.value = isSelected ? "" : value;
+
+      if (!isSelected) {
+        choice.classList.add("is-selected");
+        choice.setAttribute("aria-pressed", "true");
+        trackMetrikaGoal("interest_selected", {
+          interest: value,
+          form: group.closest(".modal-form") ? "modal" : group.closest(".quick-lead-form") ? "quick" : "section",
+          page: window.location.pathname,
+          ...getTrackingParamsObject()
+        });
+      }
+    });
   });
 });
 
@@ -1179,7 +1286,6 @@ leadForms.forEach((leadForm) => {
     const status = leadForm.querySelector("[data-form-status]");
     const nameInput = leadForm.querySelector("[name='name']");
     const phoneInput = leadForm.querySelector('input[type="tel"][name="phone"]');
-    const interestInput = leadForm.querySelector("[name='interest']");
     const endpoint = document.body.dataset.leadEndpoint;
     const hasAmoForm = Boolean(document.body.dataset.amoFormId && document.body.dataset.amoFormHash);
     const data = Object.fromEntries(new FormData(leadForm).entries());
@@ -1197,14 +1303,8 @@ leadForms.forEach((leadForm) => {
       return;
     }
 
-    if (interestInput && !data.interest) {
-      showFieldError(interestInput, status, getMessage("interestRequired"));
-      return;
-    }
-
     if (nameInput) nameInput.setCustomValidity("");
     if (phoneInput) phoneInput.setCustomValidity("");
-    if (interestInput) interestInput.setCustomValidity("");
 
     const lead = {
       ...data,
@@ -1231,7 +1331,17 @@ leadForms.forEach((leadForm) => {
         });
         if (!response.ok) throw new Error("Lead endpoint failed");
       } else if (hasAmoForm) {
+        trackMetrikaGoal("amo_submit_attempt", {
+          form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+          page: window.location.pathname,
+          ...getTrackingParamsObject()
+        });
         await submitLeadToAmo(lead);
+        trackMetrikaGoal("amo_submit_success", {
+          form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+          page: window.location.pathname,
+          ...getTrackingParamsObject()
+        });
       } else {
         const savedLeads = JSON.parse(localStorage.getItem("keanLeads") || "[]");
         savedLeads.push(lead);
@@ -1246,6 +1356,10 @@ leadForms.forEach((leadForm) => {
         ...getTrackingParamsObject()
       });
       leadForm.reset();
+      leadForm.querySelectorAll("[data-interest-choice]").forEach((choice) => {
+        choice.classList.remove("is-selected");
+        choice.setAttribute("aria-pressed", "false");
+      });
       if (endpoint || hasAmoForm) {
         if (leadForm.closest("[data-modal]")) closeModal();
         showSuccessPopup();
@@ -1258,6 +1372,13 @@ leadForms.forEach((leadForm) => {
         }
       }
     } catch (error) {
+      trackMetrikaGoal("form_error", {
+        field: "submit",
+        message: error?.message || "Lead submit failed",
+        form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+        page: window.location.pathname,
+        ...getTrackingParamsObject()
+      });
       if (status) {
         status.textContent = getMessage("failure");
       }
