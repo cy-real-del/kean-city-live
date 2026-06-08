@@ -1,5 +1,7 @@
 const YANDEX_METRICA_ID = 109324730;
 const TRACKING_STORAGE_KEY = "keanTrackingParams";
+const FORM_MIN_SUBMIT_MS = 3000;
+const pageLoadedAt = performance.now();
 const header = document.querySelector("[data-header]");
 const menuButton = document.querySelector("[data-menu-button]");
 const mobileMenu = document.querySelector("[data-mobile-menu]");
@@ -675,7 +677,9 @@ Object.assign(attributeTranslations.en, {
 const uiMessages = {
   ru: {
     nameRequired: "Введите имя.",
+    nameInvalid: "Введите настоящее имя без ссылок и тестовых значений.",
     phoneRequired: "Введите телефон в международном формате, начиная с +.",
+    phoneInvalid: "Введите реальный телефон в международном формате.",
     interestRequired: "Выберите цель покупки.",
     leadTitle: "Заявка Kean Limassol",
     nameLabel: "Имя",
@@ -691,7 +695,9 @@ const uiMessages = {
   },
   en: {
     nameRequired: "Enter your name.",
+    nameInvalid: "Enter a real name without links or test values.",
     phoneRequired: "Enter your phone in international format, starting with +.",
+    phoneInvalid: "Enter a real phone number in international format.",
     interestRequired: "Select a purchase goal.",
     leadTitle: "Kean Limassol enquiry",
     nameLabel: "Name",
@@ -923,6 +929,64 @@ function isValidInternationalPhone(value) {
   const phone = value.trim();
   const digitCount = phone.replace(/\D/g, "").length;
   return phone.startsWith("+") && digitCount >= 8;
+}
+
+function getFormType(form) {
+  if (form.classList.contains("modal-form")) return "modal";
+  if (form.classList.contains("quick-lead-form")) return "quick";
+  return "section";
+}
+
+function getNameSpamReason(value) {
+  const name = value.trim();
+  const normalized = name.toLowerCase().replace(/[\s._-]+/g, "");
+  const blockedNames = new Set(["test", "asdf", "qwerty", "йцукен", "тест", "admin", "null", "none", "name", "имя"]);
+
+  if (name.length < 2 || name.length > 80) return "bad_name";
+  if (/(https?:\/\/|www\.|@|\.ru\b|\.com\b|\.net\b|\.org\b)/i.test(name)) return "bad_name";
+  if (!/\p{L}/u.test(name)) return "bad_name";
+  if (blockedNames.has(normalized)) return "bad_name";
+  if (/^(\p{L})\1+$/u.test(normalized)) return "bad_name";
+
+  return "";
+}
+
+function getPhoneSpamReason(value) {
+  const digits = value.replace(/\D/g, "");
+  const localPart = digits.slice(-8);
+  const blockedLocalNumbers = new Set(["00000000", "11111111", "22222222", "33333333", "44444444", "55555555", "66666666", "77777777", "88888888", "99999999", "12345678", "87654321"]);
+
+  if (!isValidInternationalPhone(value)) return "";
+  if (/^(\d)\1{7}$/.test(localPart)) return "bad_phone";
+  if (blockedLocalNumbers.has(localPart)) return "bad_phone";
+
+  return "";
+}
+
+function trackSpamBlocked(reason, form, extra = {}) {
+  trackMetrikaGoal("spam_blocked", {
+    reason,
+    form: getFormType(form),
+    page: window.location.pathname,
+    ...extra,
+    ...getTrackingParamsObject()
+  });
+}
+
+function resolveSpamReason(form, data) {
+  const honeypotInput = form.querySelector('[name="contact_company_site"]');
+  const honeypotValue = String(data.contact_company_site || honeypotInput?.value || "").trim();
+
+  if (honeypotValue) return "honeypot";
+  if (performance.now() - pageLoadedAt < FORM_MIN_SUBMIT_MS) return "too_fast";
+  return "";
+}
+
+function handleNeutralSpamBlock(reason, form, status) {
+  trackSpamBlocked(reason, form);
+  if (form.closest("[data-modal]")) closeModal();
+  showSuccessPopup();
+  if (status) status.textContent = getMessage("successEndpoint");
 }
 
 function showFieldError(field, status, message) {
@@ -1274,7 +1338,7 @@ interestGroups.forEach((group) => {
 });
 
 leadForms.forEach((leadForm) => {
-  leadForm.querySelectorAll("[name='name'], [name='phone'], [name='interest']").forEach((field) => {
+  leadForm.querySelectorAll("[name='name'], [name='phone'], [name='interest'], [name='contact_company_site']").forEach((field) => {
     field.addEventListener("input", () => field.setCustomValidity(""));
     field.addEventListener("change", () => field.setCustomValidity(""));
   });
@@ -1292,6 +1356,7 @@ leadForms.forEach((leadForm) => {
     data.name = String(data.name || "").trim();
     data.phone = String(data.phone || "").trim();
     data.interest = String(data.interest || "").trim();
+    data.contact_company_site = String(data.contact_company_site || "").trim();
 
     if (nameInput && !data.name) {
       showFieldError(nameInput, status, getMessage("nameRequired"));
@@ -1303,8 +1368,29 @@ leadForms.forEach((leadForm) => {
       return;
     }
 
+    const neutralSpamReason = resolveSpamReason(leadForm, data);
+    if (neutralSpamReason) {
+      handleNeutralSpamBlock(neutralSpamReason, leadForm, status);
+      return;
+    }
+
+    const nameSpamReason = getNameSpamReason(data.name);
+    if (nameInput && nameSpamReason) {
+      trackSpamBlocked(nameSpamReason, leadForm, { field: "name" });
+      showFieldError(nameInput, status, getMessage("nameInvalid"));
+      return;
+    }
+
+    const phoneSpamReason = getPhoneSpamReason(data.phone);
+    if (phoneInput && phoneSpamReason) {
+      trackSpamBlocked(phoneSpamReason, leadForm, { field: "phone" });
+      showFieldError(phoneInput, status, getMessage("phoneInvalid"));
+      return;
+    }
+
     if (nameInput) nameInput.setCustomValidity("");
     if (phoneInput) phoneInput.setCustomValidity("");
+    delete data.contact_company_site;
 
     const lead = {
       ...data,
