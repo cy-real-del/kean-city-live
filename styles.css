@@ -1275,9 +1275,11 @@ body.modal-open {
 }
 
 .heritage-media img {
+  display: block;
   width: 100%;
-  min-height: clamp(420px, 54vw, 720px);
+  height: clamp(420px, 54vw, 720px);
   object-fit: cover;
+  object-position: center center;
   box-shadow: var(--shadow);
 }
 
@@ -3869,12 +3871,19 @@ p {
 
   .choice-media img,
   .image-story-media,
-  .heritage-media img,
   .feature-image img,
   .feature-image.tall img {
     min-height: 0;
     aspect-ratio: 4 / 5;
     object-fit: cover;
+  }
+
+  .heritage-media img {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    object-position: center center;
   }
 
   .video-showcase {
