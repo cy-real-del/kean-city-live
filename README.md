@@ -25,7 +25,7 @@
 
 ## Конверсии для Яндекс Директа и amoCRM
 
-Сайт уже передает в заявку рекламную атрибуцию: `yandexClientId`, `yandexMetrikaId`, `_ym_uid`, UTM-метки, `yclid`, `gclid`, `fbclid`, referrer и страницу заявки. Если используется встроенная отправка в amoCRM forms, эти данные добавляются в примечание к сделке и в системные поля статистики сделки amoCRM (`_ym_uid`, `_ym_counter`, `yclid`, `utm_*`, `gclid`, `fbclid`, `referrer`). Если используется `data-lead-endpoint`, endpoint получит эти поля в JSON payload.
+Сайт передает в заявку рекламную атрибуцию: `yandexClientId`, `yandexMetrikaId`, `_ym_uid`, UTM-метки, `yclid`, `gclid`, `fbclid`, referrer и страницу заявки. Для встроенной отправки в amoCRM Forms сайт тихо инициализирует официальный amoCRM Forms transport/GSO, отправляет `lead.custom_fields_values` и добавляет `gso_session_uid` в `queue/add`; это нужно, чтобы системные поля сделки amoCRM (`_ym_uid`, `_ym_counter`, `yclid`, `utm_*`, `gclid`, `fbclid`, `referrer`) реально заполнялись, а не оставались только в примечании. Если используется `data-lead-endpoint`, endpoint получит эти поля в JSON payload.
 
 WhatsApp-ссылки автоматически получают текст с текущей страницей, UTM/click ID и `Metrika ClientID`. Это нужно, чтобы менеджер или интеграция amoCRM могли сохранить идентификатор в сделку, если лид пришел через WhatsApp.
 

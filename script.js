@@ -2,6 +2,10 @@ const YANDEX_METRICA_ID = 109324730;
 const TRACKING_STORAGE_KEY = "keanTrackingParams";
 const METRIKA_CLIENT_ID_STORAGE_KEY = "keanMetrikaClientId";
 const METRIKA_CLIENT_ID_TIMEOUT_MS = 1200;
+const AMO_FORMS_SCRIPT_SRC = "https://forms.amocrm.ru/forms/assets/js/amoforms.js?1782738362";
+const AMO_FORMS_LOCALE = "ru";
+const AMO_FORMS_GSO_TIMEOUT_MS = 5000;
+const AMO_FORMS_META_SETTLE_MS = 350;
 const FORM_MIN_SUBMIT_MS = 6000;
 const SUBMIT_RATE_STORAGE_KEY = "keanLeadSubmitTimestamps";
 const SUBMIT_RATE_WINDOW_MS = 15 * 60 * 1000;
@@ -47,6 +51,7 @@ let successPopupTimer;
 let scroll75Tracked = false;
 let cachedMetrikaClientId = "";
 let pendingMetrikaClientIdPromise = null;
+let pendingAmoFormsTransportPromise = null;
 
 function initYandexMetrika() {
   if (!YANDEX_METRICA_ID || window.__keanMetrikaInitialized) return;
@@ -1305,10 +1310,150 @@ function getAmoTrackingFields(lead) {
   };
 }
 
-function submitLeadToAmo(lead) {
+function getAmoTrackingMetaFields(lead) {
+  const attribution = lead.attribution || getLeadAttribution(lead.yandexClientId);
+  const tracking = attribution.tracking || {};
+  const values = [
+    ["UTM_CONTENT", tracking.utm_content],
+    ["UTM_MEDIUM", tracking.utm_medium],
+    ["UTM_CAMPAIGN", tracking.utm_campaign],
+    ["UTM_SOURCE", tracking.utm_source],
+    ["UTM_TERM", tracking.utm_term],
+    ["UTM_REFERRER", tracking.utm_referrer],
+    ["REFERRER", attribution.referrer],
+    ["_YM_UID", attribution.metrikaClientId || attribution.ymUid],
+    ["_YM_COUNTER", String(attribution.metrikaCounterId || "")],
+    ["GCLID", tracking.gclid],
+    ["YCLID", tracking.yclid],
+    ["FBCLID", tracking.fbclid]
+  ];
+
+  return values
+    .filter(([, value]) => value)
+    .map(([fieldCode, value]) => ({
+      field_code: fieldCode,
+      values: [{ value: String(value) }]
+    }));
+}
+
+function configureAmoFormsTransport(formId, formHash) {
+  if (!formId || !formHash || typeof window === "undefined" || typeof document === "undefined") return;
+  const key = `${formId}:${formHash}`;
+  if (window.__keanAmoFormsTransportKey === key) return;
+
+  window.amo_forms_params = window.amo_forms_params || {
+    setMeta(params) {
+      this.params = (this.params || []).concat([params]);
+    }
+  };
+  window.amo_forms_load = window.amo_forms_load || function(formConfig) {
+    window.amo_forms_load.f = (window.amo_forms_load.f || []).concat([formConfig]);
+  };
+  window.amo_forms_loaded = window.amo_forms_loaded || function(callback, formKey) {
+    window.amo_forms_loaded.f = (window.amo_forms_loaded.f || []).concat([[callback, formKey]]);
+  };
+
+  window.amo_forms_load({
+    id: formId,
+    hash: formHash,
+    locale: AMO_FORMS_LOCALE
+  });
+
+  const scriptId = `amoforms_script_${formId}`;
+  if (!document.getElementById(scriptId)) {
+    const host = document.createElement("div");
+    host.id = "kean-amoforms-transport";
+    host.setAttribute("aria-hidden", "true");
+    host.style.cssText = "display:none;width:0;height:0;overflow:hidden;";
+
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.async = true;
+    script.charset = "utf-8";
+    script.src = AMO_FORMS_SCRIPT_SRC;
+
+    host.append(script);
+    document.body.append(host);
+  }
+
+  window.__keanAmoFormsTransportKey = key;
+}
+
+function waitForAmoFormsSession(formId, formHash) {
+  if (!formId || !formHash) return Promise.resolve("");
+  if (pendingAmoFormsTransportPromise) return pendingAmoFormsTransportPromise;
+
+  pendingAmoFormsTransportPromise = new Promise((resolve) => {
+    configureAmoFormsTransport(formId, formHash);
+
+    const startedAt = Date.now();
+    let settled = false;
+
+    const finish = (sessionUid = "") => {
+      if (settled) return;
+      settled = true;
+      resolve(sessionUid);
+    };
+
+    const poll = () => {
+      const sessionUid = window.AMO_PIXEL_CLIENT?.getSessionUid?.() || "";
+      if (sessionUid) {
+        finish(sessionUid);
+        return;
+      }
+
+      if (Date.now() - startedAt >= AMO_FORMS_GSO_TIMEOUT_MS) {
+        finish("");
+        return;
+      }
+
+      window.setTimeout(poll, 150);
+    };
+
+    if (typeof window.amo_forms_loaded === "function") {
+      window.amo_forms_loaded(() => window.setTimeout(poll, 100), Number(formId));
+    }
+
+    window.setTimeout(poll, 500);
+  }).catch(() => "");
+
+  return pendingAmoFormsTransportPromise;
+}
+
+async function prepareAmoFormsTrackingSession(lead, formId, formHash) {
+  const sessionUid = await waitForAmoFormsSession(formId, formHash);
+  const customFieldsValues = getAmoTrackingMetaFields(lead);
+
+  if (customFieldsValues.length && typeof window.amo_forms_params?.setMeta === "function") {
+    window.amo_forms_params.setMeta({
+      lead: {
+        custom_fields_values: customFieldsValues
+      }
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, AMO_FORMS_META_SETTLE_MS));
+  }
+
+  return sessionUid || "";
+}
+
+function preloadAmoFormsTransport() {
+  const formId = document.body.dataset.amoFormId;
+  const formHash = document.body.dataset.amoFormHash;
+  if (!formId || !formHash) return;
+  window.setTimeout(() => {
+    waitForAmoFormsSession(formId, formHash);
+  }, 1500);
+}
+
+preloadAmoFormsTransport();
+
+async function submitLeadToAmo(lead) {
   const formId = document.body.dataset.amoFormId;
   const formHash = document.body.dataset.amoFormHash;
   if (!formId || !formHash) return Promise.reject(new Error("amoCRM form is not configured"));
+  const gsoSessionUid = await prepareAmoFormsTrackingSession(lead, formId, formHash);
+  const attribution = lead.attribution || getLeadAttribution(lead.yandexClientId);
+  const tracking = attribution.tracking || {};
 
   return new Promise((resolve) => {
     const frameName = "kean-amo-lead-frame";
@@ -1353,9 +1498,12 @@ function submitLeadToAmo(lead) {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       referer: document.referrer || "",
       yandex_client_id: lead.yandexClientId || "",
+      _ym_uid: attribution.metrikaClientId || attribution.ymUid || "",
       yandex_metrika_id: String(lead.yandexMetrikaId || ""),
-      yclid: lead.tracking?.yclid || ""
+      _ym_counter: String(attribution.metrikaCounterId || ""),
+      yclid: tracking.yclid || lead.tracking?.yclid || ""
     }));
+    addField("gso_session_uid", gsoSessionUid);
     addField("fields[name_1]", lead.name);
     addField("fields[984859_1][553087]", lead.phone);
     Object.entries(getAmoTrackingFields(lead)).forEach(([fieldId, value]) => {
