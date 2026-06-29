@@ -1,6 +1,26 @@
 const YANDEX_METRICA_ID = 109324730;
 const TRACKING_STORAGE_KEY = "keanTrackingParams";
-const FORM_MIN_SUBMIT_MS = 3000;
+const METRIKA_CLIENT_ID_STORAGE_KEY = "keanMetrikaClientId";
+const METRIKA_CLIENT_ID_TIMEOUT_MS = 1200;
+const FORM_MIN_SUBMIT_MS = 6000;
+const SUBMIT_RATE_STORAGE_KEY = "keanLeadSubmitTimestamps";
+const SUBMIT_RATE_WINDOW_MS = 15 * 60 * 1000;
+const SUBMIT_RATE_LIMIT = 3;
+const WHATSAPP_DEFAULT_TEXT = "Здравствуйте! Интересует Kean Limassol. Пришлите, пожалуйста, планировки, цены и доступные форматы.";
+const AMO_LEAD_TRACKING_FIELD_IDS = {
+  utm_content: "984867",
+  utm_medium: "984869",
+  utm_campaign: "984871",
+  utm_source: "984873",
+  utm_term: "984875",
+  utm_referrer: "984877",
+  referrer: "984881",
+  ym_uid: "984895",
+  ym_counter: "984897",
+  gclid: "984899",
+  yclid: "984901",
+  fbclid: "984903"
+};
 const pageLoadedAt = performance.now();
 const header = document.querySelector("[data-header]");
 const menuButton = document.querySelector("[data-menu-button]");
@@ -25,6 +45,8 @@ const formStartTracked = new WeakSet();
 const phoneStartTracked = new WeakSet();
 let successPopupTimer;
 let scroll75Tracked = false;
+let cachedMetrikaClientId = "";
+let pendingMetrikaClientIdPromise = null;
 
 function initYandexMetrika() {
   if (!YANDEX_METRICA_ID || window.__keanMetrikaInitialized) return;
@@ -64,6 +86,73 @@ function trackMetrikaGoal(goal, params = {}) {
 }
 
 initYandexMetrika();
+
+function readCookieValue(name) {
+  return document.cookie
+    .split("; ")
+    .map((cookie) => cookie.split("="))
+    .find(([key]) => key === name)?.[1] || "";
+}
+
+function readStoredMetrikaClientId() {
+  try {
+    return localStorage.getItem(METRIKA_CLIENT_ID_STORAGE_KEY) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function rememberMetrikaClientId(clientId) {
+  const normalizedClientId = String(clientId || "").trim();
+  if (!normalizedClientId) return "";
+  cachedMetrikaClientId = normalizedClientId;
+  try {
+    localStorage.setItem(METRIKA_CLIENT_ID_STORAGE_KEY, normalizedClientId);
+  } catch (error) {
+    // Storage can be unavailable in private modes.
+  }
+  return normalizedClientId;
+}
+
+function getCachedMetrikaClientId() {
+  return cachedMetrikaClientId || readStoredMetrikaClientId() || readCookieValue("_ym_uid");
+}
+
+function getMetrikaClientId() {
+  const cachedClientId = getCachedMetrikaClientId();
+  if (cachedClientId) return Promise.resolve(cachedClientId);
+  if (pendingMetrikaClientIdPromise) return pendingMetrikaClientIdPromise;
+  if (typeof window.ym !== "function") return Promise.resolve("");
+
+  pendingMetrikaClientIdPromise = new Promise((resolve) => {
+    let settled = false;
+    const fallbackClientId = getCachedMetrikaClientId();
+
+    const finish = (clientId, shouldResolve = true) => {
+      const normalizedClientId = rememberMetrikaClientId(clientId) || fallbackClientId;
+      if (normalizedClientId && typeof updateWhatsappLinks === "function") {
+        updateWhatsappLinks(normalizedClientId);
+      }
+      if (!shouldResolve || settled) return;
+      settled = true;
+      pendingMetrikaClientIdPromise = null;
+      resolve(normalizedClientId);
+    };
+
+    try {
+      window.ym(YANDEX_METRICA_ID, "getClientID", (clientId) => finish(clientId));
+    } catch (error) {
+      finish(fallbackClientId);
+      return;
+    }
+
+    window.setTimeout(() => {
+      if (!settled) finish(fallbackClientId);
+    }, METRIKA_CLIENT_ID_TIMEOUT_MS);
+  });
+
+  return pendingMetrikaClientIdPromise;
+}
 
 const textTranslations = {
   en: {
@@ -680,6 +769,7 @@ const uiMessages = {
     nameInvalid: "Введите настоящее имя без ссылок и тестовых значений.",
     phoneRequired: "Введите телефон в международном формате, начиная с +.",
     phoneInvalid: "Введите реальный телефон в международном формате.",
+    messageInvalid: "Комментарий выглядит некорректно. Уберите ссылки, email или рекламный текст.",
     interestRequired: "Выберите цель покупки.",
     leadTitle: "Заявка Kean Limassol",
     nameLabel: "Имя",
@@ -698,6 +788,7 @@ const uiMessages = {
     nameInvalid: "Enter a real name without links or test values.",
     phoneRequired: "Enter your phone in international format, starting with +.",
     phoneInvalid: "Enter a real phone number in international format.",
+    messageInvalid: "The comment looks incorrect. Remove links, email addresses or promotional text.",
     interestRequired: "Select a purchase goal.",
     leadTitle: "Kean Limassol enquiry",
     nameLabel: "Name",
@@ -928,7 +1019,7 @@ function sanitizePhone(value) {
 function isValidInternationalPhone(value) {
   const phone = value.trim();
   const digitCount = phone.replace(/\D/g, "").length;
-  return phone.startsWith("+") && digitCount >= 8;
+  return phone.startsWith("+") && digitCount >= 8 && digitCount <= 15;
 }
 
 function getFormType(form) {
@@ -940,27 +1031,117 @@ function getFormType(form) {
 function getNameSpamReason(value) {
   const name = value.trim();
   const normalized = name.toLowerCase().replace(/[\s._-]+/g, "");
-  const blockedNames = new Set(["test", "asdf", "qwerty", "йцукен", "тест", "admin", "null", "none", "name", "имя"]);
+  const blockedNames = new Set([
+    "test",
+    "testing",
+    "asdf",
+    "qwe",
+    "qwerty",
+    "qwertyuiop",
+    "йцукен",
+    "тест",
+    "admin",
+    "null",
+    "none",
+    "name",
+    "noname",
+    "username",
+    "user",
+    "client",
+    "unknown",
+    "имя",
+    "клиент",
+    "пользователь"
+  ]);
 
   if (name.length < 2 || name.length > 80) return "bad_name";
   if (/(https?:\/\/|www\.|@|\.ru\b|\.com\b|\.net\b|\.org\b)/i.test(name)) return "bad_name";
   if (!/\p{L}/u.test(name)) return "bad_name";
+  if (/\d/.test(name)) return "bad_name";
   if (blockedNames.has(normalized)) return "bad_name";
   if (/^(\p{L})\1+$/u.test(normalized)) return "bad_name";
+  if (/(.)\1{4,}/u.test(normalized)) return "bad_name";
 
   return "";
+}
+
+function hasSequentialDigits(digits) {
+  if (digits.length < 6) return false;
+  const ascending = "0123456789012345";
+  const descending = "9876543210987654";
+  return ascending.includes(digits) || descending.includes(digits);
 }
 
 function getPhoneSpamReason(value) {
   const digits = value.replace(/\D/g, "");
   const localPart = digits.slice(-8);
-  const blockedLocalNumbers = new Set(["00000000", "11111111", "22222222", "33333333", "44444444", "55555555", "66666666", "77777777", "88888888", "99999999", "12345678", "87654321"]);
+  const uniqueDigits = new Set(digits.split("")).size;
+  const blockedLocalNumbers = new Set([
+    "00000000",
+    "11111111",
+    "22222222",
+    "33333333",
+    "44444444",
+    "55555555",
+    "66666666",
+    "77777777",
+    "88888888",
+    "99999999",
+    "12345678",
+    "87654321",
+    "123456789",
+    "987654321"
+  ]);
 
-  if (!isValidInternationalPhone(value)) return "";
+  if (!isValidInternationalPhone(value)) return "bad_phone";
   if (/^(\d)\1{7}$/.test(localPart)) return "bad_phone";
   if (blockedLocalNumbers.has(localPart)) return "bad_phone";
+  if (blockedLocalNumbers.has(digits.slice(-9))) return "bad_phone";
+  if (uniqueDigits < 3) return "bad_phone";
+  if (hasSequentialDigits(localPart) || hasSequentialDigits(digits.slice(-9))) return "bad_phone";
 
   return "";
+}
+
+function getMessageSpamReason(value) {
+  const message = value.trim();
+  if (!message) return "";
+  const normalized = message.toLowerCase().replace(/[\s._-]+/g, "");
+  const blockedFragments = ["qwerty", "asdf", "йцукен", "casino", "viagra", "crypto", "loan", "seo"];
+
+  if (message.length > 1000) return "bad_message";
+  if (/(https?:\/\/|www\.|@|\.ru\b|\.com\b|\.net\b|\.org\b|\.info\b|\.biz\b)/i.test(message)) return "bad_message";
+  if (blockedFragments.some((fragment) => normalized.includes(fragment))) return "bad_message";
+  if (/^([\W\d_])\1{5,}$/u.test(normalized)) return "bad_message";
+  if (/(.)\1{8,}/u.test(normalized)) return "bad_message";
+
+  return "";
+}
+
+function readSubmitTimestamps() {
+  try {
+    const timestamps = JSON.parse(localStorage.getItem(SUBMIT_RATE_STORAGE_KEY) || "[]");
+    if (!Array.isArray(timestamps)) return [];
+    const now = Date.now();
+    return timestamps
+      .map((timestamp) => Number(timestamp))
+      .filter((timestamp) => Number.isFinite(timestamp) && now - timestamp < SUBMIT_RATE_WINDOW_MS);
+  } catch (error) {
+    return [];
+  }
+}
+
+function getRateLimitSpamReason() {
+  return readSubmitTimestamps().length >= SUBMIT_RATE_LIMIT ? "too_many_submits" : "";
+}
+
+function rememberSuccessfulSubmit() {
+  try {
+    const timestamps = [...readSubmitTimestamps(), Date.now()].slice(-SUBMIT_RATE_LIMIT);
+    localStorage.setItem(SUBMIT_RATE_STORAGE_KEY, JSON.stringify(timestamps));
+  } catch (error) {
+    // localStorage may be unavailable in private browsing; ignore without blocking real leads.
+  }
 }
 
 function trackSpamBlocked(reason, form, extra = {}) {
@@ -974,12 +1155,15 @@ function trackSpamBlocked(reason, form, extra = {}) {
 }
 
 function resolveSpamReason(form, data) {
-  const honeypotInput = form.querySelector('[name="contact_company_site"]');
-  const honeypotValue = String(data.contact_company_site || honeypotInput?.value || "").trim();
+  const honeypotNames = ["contact_company_site", "website_url"];
+  const hasFilledHoneypot = honeypotNames.some((name) => {
+    const input = form.querySelector(`[name="${name}"]`);
+    return String(data[name] || input?.value || "").trim();
+  });
 
-  if (honeypotValue) return "honeypot";
+  if (hasFilledHoneypot) return "honeypot";
   if (performance.now() - pageLoadedAt < FORM_MIN_SUBMIT_MS) return "too_fast";
-  return "";
+  return getRateLimitSpamReason();
 }
 
 function handleNeutralSpamBlock(reason, form, status) {
@@ -1039,11 +1223,87 @@ function getTrackingParamsObject() {
   };
 }
 
-function getTrackingParams() {
-  return Object.entries(getTrackingParamsObject()).map(([key, value]) => `${key}: ${value}`);
+persistTrackingParams();
+
+function getLeadAttribution(metrikaClientId = getCachedMetrikaClientId()) {
+  return {
+    metrikaCounterId: YANDEX_METRICA_ID,
+    metrikaClientId: metrikaClientId || "",
+    ymUid: readCookieValue("_ym_uid"),
+    tracking: getTrackingParamsObject(),
+    referrer: document.referrer || "",
+    landingPage: window.location.href
+  };
 }
 
-persistTrackingParams();
+function formatAttributionLines(attribution = getLeadAttribution()) {
+  const trackingLines = Object.entries(attribution.tracking || {})
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key}: ${value}`);
+
+  return [
+    attribution.metrikaClientId ? `Metrika ClientID: ${attribution.metrikaClientId}` : "",
+    attribution.ymUid ? `_ym_uid: ${attribution.ymUid}` : "",
+    attribution.metrikaCounterId ? `Metrika counter: ${attribution.metrikaCounterId}` : "",
+    ...trackingLines,
+    attribution.referrer ? `Referrer: ${attribution.referrer}` : ""
+  ].filter(Boolean);
+}
+
+function buildWhatsappText(link, metrikaClientId = getCachedMetrikaClientId()) {
+  const attribution = getLeadAttribution(metrikaClientId);
+  return [
+    WHATSAPP_DEFAULT_TEXT,
+    `Страница: ${window.location.href}`,
+    link?.textContent?.trim() ? `CTA: ${link.textContent.trim()}` : "",
+    ...formatAttributionLines(attribution)
+  ].filter(Boolean).join("\n");
+}
+
+function buildWhatsappUrl(baseHref, text) {
+  try {
+    const url = new URL(baseHref, window.location.href);
+    url.searchParams.set("text", text);
+    return url.toString();
+  } catch (error) {
+    return baseHref;
+  }
+}
+
+function updateWhatsappLink(link, metrikaClientId = getCachedMetrikaClientId()) {
+  if (!link.dataset.whatsappBaseHref) {
+    link.dataset.whatsappBaseHref = link.getAttribute("href") || "";
+  }
+  const baseHref = link.dataset.whatsappBaseHref;
+  if (!baseHref) return;
+  link.href = buildWhatsappUrl(baseHref, buildWhatsappText(link, metrikaClientId));
+}
+
+function updateWhatsappLinks(metrikaClientId = getCachedMetrikaClientId()) {
+  document.querySelectorAll('a[href*="wa.me"]').forEach((link) => updateWhatsappLink(link, metrikaClientId));
+}
+
+updateWhatsappLinks();
+getMetrikaClientId().then((metrikaClientId) => updateWhatsappLinks(metrikaClientId));
+
+function getAmoTrackingFields(lead) {
+  const attribution = lead.attribution || getLeadAttribution(lead.yandexClientId);
+  const tracking = attribution.tracking || {};
+  return {
+    [AMO_LEAD_TRACKING_FIELD_IDS.utm_content]: tracking.utm_content,
+    [AMO_LEAD_TRACKING_FIELD_IDS.utm_medium]: tracking.utm_medium,
+    [AMO_LEAD_TRACKING_FIELD_IDS.utm_campaign]: tracking.utm_campaign,
+    [AMO_LEAD_TRACKING_FIELD_IDS.utm_source]: tracking.utm_source,
+    [AMO_LEAD_TRACKING_FIELD_IDS.utm_term]: tracking.utm_term,
+    [AMO_LEAD_TRACKING_FIELD_IDS.utm_referrer]: tracking.utm_referrer,
+    [AMO_LEAD_TRACKING_FIELD_IDS.referrer]: attribution.referrer,
+    [AMO_LEAD_TRACKING_FIELD_IDS.ym_uid]: attribution.metrikaClientId || attribution.ymUid,
+    [AMO_LEAD_TRACKING_FIELD_IDS.ym_counter]: String(attribution.metrikaCounterId || ""),
+    [AMO_LEAD_TRACKING_FIELD_IDS.gclid]: tracking.gclid,
+    [AMO_LEAD_TRACKING_FIELD_IDS.yclid]: tracking.yclid,
+    [AMO_LEAD_TRACKING_FIELD_IDS.fbclid]: tracking.fbclid
+  };
+}
 
 function submitLeadToAmo(lead) {
   const formId = document.body.dataset.amoFormId;
@@ -1078,11 +1338,12 @@ function submitLeadToAmo(lead) {
     };
 
     const note = [
+      "Spam check: passed",
       lead.interest ? `Цель: ${lead.interest}` : "",
       lead.message ? `Комментарий: ${lead.message}` : "",
       lead.page ? `Страница: ${lead.page}` : "",
       lead.source ? `Источник: ${lead.source}` : "",
-      ...getTrackingParams()
+      ...formatAttributionLines(lead.attribution || getLeadAttribution(lead.yandexClientId))
     ].filter(Boolean).join("\n");
 
     addField("form_id", formId);
@@ -1090,10 +1351,16 @@ function submitLeadToAmo(lead) {
     addField("user_origin", JSON.stringify({
       datetime: `${new Date().toDateString()} ${new Date().toTimeString()}`,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      referer: document.referrer || ""
+      referer: document.referrer || "",
+      yandex_client_id: lead.yandexClientId || "",
+      yandex_metrika_id: String(lead.yandexMetrikaId || ""),
+      yclid: lead.tracking?.yclid || ""
     }));
     addField("fields[name_1]", lead.name);
     addField("fields[984859_1][553087]", lead.phone);
+    Object.entries(getAmoTrackingFields(lead)).forEach(([fieldId, value]) => {
+      if (value) addField(`fields[${fieldId}_2]`, value);
+    });
     addField("fields[note_2]", note);
 
     let settled = false;
@@ -1184,10 +1451,16 @@ document.querySelectorAll('a[href="#mobile-lead"], a[href="#lead"]').forEach((li
 
 document.querySelectorAll('a[href*="wa.me"]').forEach((link) => {
   link.addEventListener("click", () => {
+    const metrikaClientId = getCachedMetrikaClientId();
+    updateWhatsappLink(link, metrikaClientId);
     trackMetrikaGoal("whatsapp_click", {
       text: link.textContent.trim(),
-      page: window.location.pathname
+      href: link.href,
+      page: window.location.pathname,
+      yandex_client_id: metrikaClientId,
+      ...getTrackingParamsObject()
     });
+    getMetrikaClientId().then((clientId) => updateWhatsappLinks(clientId));
   });
 });
 
@@ -1338,7 +1611,7 @@ interestGroups.forEach((group) => {
 });
 
 leadForms.forEach((leadForm) => {
-  leadForm.querySelectorAll("[name='name'], [name='phone'], [name='interest'], [name='contact_company_site']").forEach((field) => {
+  leadForm.querySelectorAll("[name='name'], [name='phone'], [name='interest'], [name='message'], [name='contact_company_site'], [name='website_url']").forEach((field) => {
     field.addEventListener("input", () => field.setCustomValidity(""));
     field.addEventListener("change", () => field.setCustomValidity(""));
   });
@@ -1350,13 +1623,16 @@ leadForms.forEach((leadForm) => {
     const status = leadForm.querySelector("[data-form-status]");
     const nameInput = leadForm.querySelector("[name='name']");
     const phoneInput = leadForm.querySelector('input[type="tel"][name="phone"]');
+    const messageInput = leadForm.querySelector("[name='message']");
     const endpoint = document.body.dataset.leadEndpoint;
     const hasAmoForm = Boolean(document.body.dataset.amoFormId && document.body.dataset.amoFormHash);
     const data = Object.fromEntries(new FormData(leadForm).entries());
     data.name = String(data.name || "").trim();
     data.phone = String(data.phone || "").trim();
     data.interest = String(data.interest || "").trim();
+    data.message = String(data.message || "").trim();
     data.contact_company_site = String(data.contact_company_site || "").trim();
+    data.website_url = String(data.website_url || "").trim();
 
     if (nameInput && !data.name) {
       showFieldError(nameInput, status, getMessage("nameRequired"));
@@ -1388,14 +1664,31 @@ leadForms.forEach((leadForm) => {
       return;
     }
 
+    const messageSpamReason = getMessageSpamReason(data.message);
+    if (messageInput && messageSpamReason) {
+      trackSpamBlocked(messageSpamReason, leadForm, { field: "message" });
+      showFieldError(messageInput, status, getMessage("messageInvalid"));
+      return;
+    }
+
     if (nameInput) nameInput.setCustomValidity("");
     if (phoneInput) phoneInput.setCustomValidity("");
+    if (messageInput) messageInput.setCustomValidity("");
     delete data.contact_company_site;
+    delete data.website_url;
 
+    const metrikaClientId = await getMetrikaClientId();
+    const attribution = getLeadAttribution(metrikaClientId);
     const lead = {
       ...data,
       source: "Kean Limassol landing",
+      spamCheck: "passed",
       page: window.location.href,
+      yandexClientId: attribution.metrikaClientId,
+      yandexMetrikaId: attribution.metrikaCounterId,
+      yandexYmUid: attribution.ymUid,
+      tracking: attribution.tracking,
+      attribution,
       createdAt: new Date().toISOString()
     };
     const contactText = [
@@ -1404,7 +1697,8 @@ leadForms.forEach((leadForm) => {
       data.phone ? `${getMessage("contactLabel")}: ${data.phone}` : "",
       data.interest ? `${getMessage("interestLabel")}: ${data.interest}` : "",
       data.message ? `${getMessage("commentLabel")}: ${data.message}` : "",
-      `${getMessage("pageLabel")}: ${window.location.href}`
+      `${getMessage("pageLabel")}: ${window.location.href}`,
+      ...formatAttributionLines(attribution)
     ].filter(Boolean).join("\n");
     const whatsappUrl = `https://wa.me/35794537782?text=${encodeURIComponent(contactText)}`;
 
@@ -1420,12 +1714,14 @@ leadForms.forEach((leadForm) => {
         trackMetrikaGoal("amo_submit_attempt", {
           form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
           page: window.location.pathname,
+          yandex_client_id: attribution.metrikaClientId,
           ...getTrackingParamsObject()
         });
         await submitLeadToAmo(lead);
         trackMetrikaGoal("amo_submit_success", {
           form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
           page: window.location.pathname,
+          yandex_client_id: attribution.metrikaClientId,
           ...getTrackingParamsObject()
         });
       } else {
@@ -1439,8 +1735,10 @@ leadForms.forEach((leadForm) => {
         interest: data.interest,
         form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
         page: window.location.pathname,
+        yandex_client_id: attribution.metrikaClientId,
         ...getTrackingParamsObject()
       });
+      rememberSuccessfulSubmit();
       leadForm.reset();
       leadForm.querySelectorAll("[data-interest-choice]").forEach((choice) => {
         choice.classList.remove("is-selected");
