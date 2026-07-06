@@ -1849,6 +1849,12 @@ leadForms.forEach((leadForm) => {
       ...formatAttributionLines(attribution)
     ].filter(Boolean).join("\n");
     const whatsappUrl = `https://wa.me/35794537782?text=${encodeURIComponent(contactText)}`;
+    const formType = leadForm.classList.contains("modal-form")
+      ? "modal"
+      : leadForm.classList.contains("quick-lead-form")
+        ? "quick"
+        : "section";
+    let shouldTrackLeadSubmit = false;
 
     try {
       if (endpoint) {
@@ -1858,18 +1864,21 @@ leadForms.forEach((leadForm) => {
           body: JSON.stringify(lead)
         });
         if (!response.ok) throw new Error("Lead endpoint failed");
+        shouldTrackLeadSubmit = true;
       } else if (hasAmoForm) {
         trackMetrikaGoal("amo_submit_attempt", {
-          form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+          form: formType,
           page: window.location.pathname,
           yandex_client_id: attribution.metrikaClientId,
           ...getTrackingParamsObject()
         });
         await submitLeadToAmo(lead);
         trackMetrikaGoal("amo_submit_success", {
-          form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+          form: formType,
           page: window.location.pathname,
           yandex_client_id: attribution.metrikaClientId,
+          confirmed_by_crm: false,
+          confirmation: "iframe_load_or_timeout",
           ...getTrackingParamsObject()
         });
       } else {
@@ -1879,13 +1888,17 @@ leadForms.forEach((leadForm) => {
         window.open(whatsappUrl, "_blank", "noopener");
       }
 
-      trackMetrikaGoal("lead_submit", {
-        interest: data.interest,
-        form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
-        page: window.location.pathname,
-        yandex_client_id: attribution.metrikaClientId,
-        ...getTrackingParamsObject()
-      });
+      // Treat amoCRM status goals as the source of truth. The iframe transport can
+      // only confirm dispatch, not that amoCRM created a qualified CRM lead.
+      if (shouldTrackLeadSubmit) {
+        trackMetrikaGoal("lead_submit", {
+          interest: data.interest,
+          form: formType,
+          page: window.location.pathname,
+          yandex_client_id: attribution.metrikaClientId,
+          ...getTrackingParamsObject()
+        });
+      }
       rememberSuccessfulSubmit();
       leadForm.reset();
       leadForm.querySelectorAll("[data-interest-choice]").forEach((choice) => {
@@ -1907,7 +1920,7 @@ leadForms.forEach((leadForm) => {
       trackMetrikaGoal("form_error", {
         field: "submit",
         message: error?.message || "Lead submit failed",
-        form: leadForm.classList.contains("modal-form") ? "modal" : leadForm.classList.contains("quick-lead-form") ? "quick" : "section",
+        form: formType,
         page: window.location.pathname,
         ...getTrackingParamsObject()
       });
