@@ -399,7 +399,7 @@ Object.assign(textTranslations.en, {
   "Получить планировки и цены в WhatsApp": "Get layouts and prices on WhatsApp",
   "Сравнить Kean с проектами": "Compare Kean with other projects",
   "Сравнить Kean с объектами Лимассола": "Compare Kean with Limassol properties",
-  "Ответим в WhatsApp / Telegram: доступные форматы, бюджет, платежный график, сравнение с альтернативами.": "We will reply on WhatsApp / Telegram with available formats, budget guidance, payment schedule and comparison with alternatives.",
+  "Ответим в WhatsApp: доступные форматы, бюджет, платежный график, сравнение с альтернативами.": "We will reply on WhatsApp with available formats, budget guidance, payment schedule and comparison with alternatives.",
   "Что вы получите через 5 минут после заявки": "What you receive within 5 minutes of your request",
   "Мы не отправляем “общий буклет”. Соберем короткое предложение под вашу цель и покажем, где Kean сильнее альтернатив в Лимассоле.": "We do not send a generic brochure. We prepare a short offer around your goal and show where Kean is stronger than Limassol alternatives.",
   "Что входит в ответ после заявки": "What is included after the request",
@@ -415,7 +415,7 @@ Object.assign(textTranslations.en, {
   "Инвестиция, жизнь, ПМЖ, переезд или бизнес на Кипре.": "Investment, living, permanent residence, relocation or business in Cyprus.",
   "Сравниваете Кипр с Дубаем, Испанией или Португалией?": "Comparing Cyprus with Dubai, Spain or Portugal?",
   "Покажем различия по входу, налогам, ликвидности и логике переезда. Kean - премиальный проект именно в Лимассоле, поэтому сначала проверим, подходит ли Кипр под вашу задачу.": "We will show differences in entry budget, taxes, liquidity and relocation logic. Kean is a premium project specifically in Limassol, so we first check whether Cyprus fits your task.",
-  "Отправим презентацию, актуальные форматы, ориентиры по бюджету и платежному графику в WhatsApp / Telegram.": "We will send the presentation, available formats, budget guidance and payment schedule references via WhatsApp / Telegram.",
+  "Отправим презентацию, актуальные форматы, ориентиры по бюджету и платежному графику в WhatsApp.": "We will send the presentation, available formats, budget guidance and payment schedule references via WhatsApp.",
   "Kean интересен не только как недвижимость у моря, а как редкий адрес: бывший участок KEAN, прибрежный Лимассол, Dasoudi, mixed-use формат и будущая узнаваемость объекта.": "Kean is compelling not only as seafront real estate, but as a rare address: the former KEAN site, coastal Limassol, Dasoudi, mixed-use format and future recognition of the project.",
   "Получить подборку редких позиций": "Get a selection of rare positions",
   "Получите планировки и цены по Kean": "Get Kean layouts and prices",
@@ -606,7 +606,7 @@ Object.assign(textTranslations.en, {
   "Передача данных": "Data transfer",
   "Данные не публикуются на сайте. При подключении CRM или почтового сервиса данные могут передаваться только выбранному оператору обработки заявок.": "Data is not published on the website. If a CRM or email service is connected, the data may be transferred only to the selected enquiry processing operator.",
   "Контакт": "Contact",
-  "По вопросам удаления или уточнения данных напишите через WhatsApp или Telegram, указанные на главной странице.": "For deletion or clarification of data, write via WhatsApp or Telegram listed on the home page.",
+  "По вопросам удаления или уточнения данных напишите через WhatsApp, указанный на главной странице.": "For deletion or clarification of data, write via WhatsApp listed on the home page.",
   "Вернуться на главную страницу проекта и запросить инвестиционный пакет.": "Return to the project home page and request the investment package.",
   "К заявке": "To request"
 });
@@ -786,7 +786,7 @@ const uiMessages = {
     successPopup: "Спасибо за заявку, мы оперативно с вами свяжемся",
     successWhatsApp: "Спасибо. Мы подготовили сообщение в WhatsApp. Если окно не открылось,",
     successWhatsAppLink: "нажмите здесь",
-    failure: "Не удалось отправить заявку. Напишите в WhatsApp или Telegram, ссылки рядом с формой."
+    failure: "Не удалось отправить заявку. Напишите в WhatsApp, ссылка рядом с формой."
   },
   en: {
     nameRequired: "Enter your name.",
@@ -805,7 +805,7 @@ const uiMessages = {
     successPopup: "Thank you for your enquiry. We will contact you shortly.",
     successWhatsApp: "Thank you. We prepared a WhatsApp message. If the window did not open,",
     successWhatsAppLink: "click here",
-    failure: "The enquiry could not be sent. Please write via WhatsApp or Telegram using the links near the form."
+    failure: "The enquiry could not be sent. Please write via WhatsApp using the link near the form."
   }
 };
 
@@ -1609,15 +1609,6 @@ document.querySelectorAll('a[href*="wa.me"]').forEach((link) => {
       ...getTrackingParamsObject()
     });
     getMetrikaClientId().then((clientId) => updateWhatsappLinks(clientId));
-  });
-});
-
-document.querySelectorAll('a[href*="t.me"]').forEach((link) => {
-  link.addEventListener("click", () => {
-    trackMetrikaGoal("telegram_click", {
-      text: link.textContent.trim(),
-      page: window.location.pathname
-    });
   });
 });
 
