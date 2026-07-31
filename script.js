@@ -41,8 +41,10 @@ const microGoalLinks = document.querySelectorAll("[data-micro-goal]");
 const interestGroups = document.querySelectorAll("[data-interest-group]");
 const scenarioItems = document.querySelectorAll(".scenario-item");
 const mobileStickyCta = document.querySelector(".mobile-sticky-cta");
-const stickyHideTargets = document.querySelectorAll("#mobile-lead, #lead");
+const heroActions = document.querySelector(".hero-actions");
+const leadSection = document.querySelector("#lead");
 const mobileScenarioQuery = window.matchMedia("(max-width: 820px)");
+const mobileStickyQuery = window.matchMedia("(max-width: 620px)");
 const LANGUAGE_STORAGE_KEY = "keanLanguage";
 const languageHeader = document.querySelector(".site-header");
 const formStartTracked = new WeakSet();
@@ -52,6 +54,8 @@ let scroll75Tracked = false;
 let cachedMetrikaClientId = "";
 let pendingMetrikaClientIdPromise = null;
 let pendingAmoFormsTransportPromise = null;
+let activeModalOpener = null;
+let stickyUpdateFrame = null;
 
 function initYandexMetrika() {
   if (!YANDEX_METRICA_ID || window.__keanMetrikaInitialized) return;
@@ -383,18 +387,19 @@ const attributeTranslations = {
 
 const metaTranslations = {
   en: {
-    title: "Kean Limassol - seafront real estate, residency and relocation to Cyprus",
-    description: "Kean Limassol is a premium seafront complex on the historic KEAN factory site in coastal Limassol. Investment property, permanent residence, non-dom, IP Box and relocation to Cyprus.",
-    keywords: "Kean Limassol, Limassol real estate, seafront apartments Limassol, Cyprus property investment, Cyprus permanent residence, Cyprus non-dom, IP Box Cyprus, relocation to Cyprus"
+    title: "Kean Limassol — a new address by the sea",
+    description: "Kean Limassol is a mixed-use coastal destination for living, investment and business next to Dasoudi Park. Request layouts, purchase terms and a personalised offer.",
+    keywords: "Kean Limassol, Limassol real estate, seafront apartments Cyprus, Cyprus property investment, Cyprus permanent residence"
   },
   ru: {
-    title: "Kean Limassol - недвижимость у моря, ПМЖ и переезд на Кипр",
-    description: "Kean Limassol - премиальный комплекс у моря на месте исторического завода KEAN в прибрежном Лимассоле. Инвестиционная недвижимость, ПМЖ, non-dom, IP Box и переезд на Кипр.",
-    keywords: "Kean Limassol, недвижимость Лимассол, апартаменты Лимассол у моря, инвестиции в недвижимость Кипр, ПМЖ Кипра, non-dom Кипр, IP Box Cyprus, переезд на Кипр"
+    title: "Kean Limassol — новый адрес у моря",
+    description: "Kean Limassol — многофункциональный прибрежный комплекс для жизни, инвестиций и бизнеса рядом с парком Dasoudi. Получите планировки, условия покупки и персональное предложение.",
+    keywords: "Kean Limassol, недвижимость Лимассол, апартаменты у моря Кипр, инвестиции в недвижимость Кипр, ПМЖ Кипр"
   }
 };
 
 Object.assign(textTranslations.en, {
+  "Планировки и цены": "Layouts and prices",
   "Получить планировки и цены": "Get layouts and prices",
   "Получить планировки и цены в WhatsApp": "Get layouts and prices on WhatsApp",
   "Сравнить Kean с проектами": "Compare Kean with other projects",
@@ -766,6 +771,99 @@ Object.assign(attributeTranslations.en, {
   "Kean Limassol как новая недвижимость на Кипре": "Kean Limassol as new real estate in Cyprus",
   "Как сравнивать районы Лимассола для покупки недвижимости: Germasogeia, Dasoudi, центр, Marina, Agios Tychonas, береговая линия и роль локации Kean Limassol.": "How to compare Limassol districts for property purchase: Germasogeia, Dasoudi, the centre, Marina, Agios Tychonas, the coastline and the role of Kean Limassol's location.",
   "Парк Dasoudi и береговая линия Лимассола рядом с Kean": "Dasoudi Park and Limassol coastline near Kean"
+});
+
+Object.assign(textTranslations.en, {
+  "Проект": "Project",
+  "Стиль жизни": "Lifestyle",
+  "Получить предложение": "Get the offer",
+  "Kean · Limassol, Cyprus": "Kean · Limassol, Cyprus",
+  "Море, город и природа в одном адресе": "Sea, city and nature in one address",
+  "Новая прибрежная среда для жизни, инвестиций и бизнеса — рядом с парком Dasoudi и ритмом Лимассола.": "A new coastal destination for living, investment and business — next to Dasoudi Park and the rhythm of Limassol.",
+  "Первая линия": "Seafront",
+  "Парк Dasoudi рядом": "Dasoudi Park nearby",
+  "Жильё и офисы": "Residences and offices",
+  "Приватная инфраструктура": "Private amenities",
+  "Написать в WhatsApp": "Message on WhatsApp",
+  "Стоимость и доступные лоты — по запросу. Ответим в течение рабочего дня.": "Pricing and available units are provided on request. We reply within one business day.",
+  "Жизнь среди зрелой зелени": "Living among mature greenery",
+  "Новая точка притяжения": "A new destination",
+  "Городской ритм среди зелени": "Urban rhythm among greenery",
+  "Kean возвращает знаковую прибрежную территорию Лимассолу — уже как цельный район для жизни, работы и отдыха.": "Kean returns a landmark coastal site to Limassol as a complete district for living, working and leisure.",
+  "Приватные сады": "Private gardens",
+  "Пешеходные маршруты": "Pedestrian routes",
+  "Ритейл и рестораны": "Retail and restaurants",
+  "архитектурные башни": "architectural towers",
+  "единая зелёная среда": "unified green environment",
+  "сервисы и безопасность": "services and security",
+  "море перед вами": "the sea in front of you",
+  "Персональный выбор": "A personal choice",
+  "Выберите свой сценарий": "Choose your scenario",
+  "Мы соберём предложение под вашу задачу — без лишних вариантов и общих презентаций.": "We will prepare an offer around your goal — without irrelevant options or generic presentations.",
+  "Инвестиции": "Investment",
+  "Подберём ликвидные форматы, разберём платежный график и сравним Kean с другими премиальными проектами Лимассола.": "We will select liquid formats, review the payment schedule and compare Kean with other premium Limassol projects.",
+  "Получить инвестиционную подборку": "Get an investment selection",
+  "Покажем планировки с лучшими видами, приватные сервисы и повседневную инфраструктуру вокруг проекта.": "We will show layouts with the best views, private services and everyday amenities around the project.",
+  "Подобрать резиденцию": "Select a residence",
+  "Релокация": "Relocation",
+  "Свяжем выбор недвижимости с переездом семьи, ПМЖ и комфортной жизнью в международной среде Лимассола.": "We will connect your property choice with family relocation, permanent residence and comfortable living in Limassol's international environment.",
+  "Обсудить переезд": "Discuss relocation",
+  "Архитектура": "Architecture",
+  "Пластика, созданная светом и морем": "A form shaped by light and sea",
+  "Террасы идут по периметру, открывая панорамы побережья. Мягкие линии фасадов связывают архитектуру с ландшафтом.": "Terraces wrap around the buildings, opening panoramic coastal views. Soft facade lines connect the architecture with the landscape.",
+  "Панорамное остекление": "Panoramic glazing",
+  "Глубокие приватные террасы": "Deep private terraces",
+  "Озеленение на каждом уровне": "Greenery on every level",
+  "Ландшафт": "Landscape",
+  "Сад, который начинается у вашего дома": "A garden that begins at your home",
+  "Зрелые деревья, вода и тихие маршруты создают прохладную среду между башнями — редкое качество для центральной части города.": "Mature trees, water and quiet paths create a cool environment between the towers — a rare quality in the heart of the city.",
+  "Узнать об инфраструктуре": "Explore the amenities",
+  "Приватность": "Privacy",
+  "Море становится частью интерьера": "The sea becomes part of the interior",
+  "Архитектура раскрывает вид и одновременно сохраняет камерность резиденций. Утро начинается с горизонта, вечер — с золотого света на воде.": "The architecture opens the view while preserving the privacy of each residence. Mornings begin with the horizon, evenings with golden light on the water.",
+  "Посмотреть планировки": "View layouts",
+  "Лимассол · район Dasoudi": "Limassol · Dasoudi area",
+  "У моря. В городе. В своём ритме.": "By the sea. In the city. At your own pace.",
+  "Kean расположен на прибрежной оси Лимассола — рядом с парком и пляжем Dasoudi, ресторанами, школами и деловой инфраструктурой.": "Kean sits on Limassol's coastal axis — next to Dasoudi Park and Beach, restaurants, schools and business infrastructure.",
+  "до моря": "to the sea",
+  "до Dasoudi": "to Dasoudi",
+  "до центра": "to the centre",
+  "Открыть на карте": "Open on the map",
+  "Команда проекта": "Project team",
+  "Международная экспертиза, локальное понимание": "International expertise, local understanding",
+  "Девелопер": "Developer",
+  "Архитектура": "Architecture",
+  "Консультант": "Advisor",
+  "Ваш следующий шаг": "Your next step",
+  "Получите персональную подборку лотов Kean": "Get a personalised selection of Kean units",
+  "Планировки и условия": "Layouts and terms",
+  "Расскажите, что важно именно вам": "Tell us what matters to you",
+  "Консультант Top Estate подготовит доступные форматы, платежный график и краткое сравнение под вашу цель.": "A Top Estate advisor will prepare available formats, the payment schedule and a concise comparison for your goal.",
+  "Телефон": "Phone",
+  "Что для вас важно?": "What matters to you?",
+  "Получить подборку": "Get a selection",
+  "Новый прибрежный адрес Лимассола.": "A new coastal address in Limassol.",
+  "Консультации Top Estate": "Top Estate advisory",
+  "Политика конфиденциальности": "Privacy policy",
+  "Наверх": "Back to top",
+  "Персональное предложение": "Personalised offer",
+  "Получите планировки и условия покупки Kean": "Get Kean layouts and purchase terms",
+  "Оставьте контакт — мы уточним вашу задачу и подготовим релевантные лоты.": "Leave your contact details — we will clarify your needs and prepare relevant units."
+});
+
+Object.assign(attributeTranslations.en, {
+  "Ключевые преимущества": "Key advantages",
+  "Башни Kean Limassol у бассейна и моря": "Kean Limassol towers by the pool and sea",
+  "Ландшафтный сад Kean Limassol": "Kean Limassol landscaped garden",
+  "Озеленённый въезд в Kean Limassol": "Landscaped arrival at Kean Limassol",
+  "Состав проекта": "Project composition",
+  "Пластичная архитектура башен Kean Limassol": "Fluid architecture of the Kean Limassol towers",
+  "Зелёный парк между башнями Kean Limassol": "Green park between the Kean Limassol towers",
+  "Закат и вид на море с террас Kean Limassol": "Sunset and sea view from Kean Limassol terraces",
+  "Общественное пространство Kean Limassol": "Kean Limassol public space",
+  "Партнёры проекта": "Project partners",
+  "Кафе и общественное пространство Kean Limassol": "Kean Limassol café and public space",
+  "Например: вид на море, 2 спальни, инвестиционная цель": "For example: sea view, 2 bedrooms, investment goal"
 });
 
 const uiMessages = {
@@ -1553,6 +1651,8 @@ function openModal() {
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  scheduleMobileStickyUpdate();
+  window.setTimeout(() => modal.querySelector("input:not([tabindex='-1'])")?.focus(), 50);
 }
 
 function closeModal() {
@@ -1560,13 +1660,22 @@ function closeModal() {
   modal.classList.remove("is-open");
   modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  scheduleMobileStickyUpdate();
+  activeModalOpener?.focus();
+  activeModalOpener = null;
 }
 
 modalOpeners.forEach((opener) => {
   opener.addEventListener("click", (event) => {
     event.preventDefault();
+    activeModalOpener = opener;
+    const ctaSource = opener.dataset.ctaSource || "modal";
+    modal?.querySelectorAll('input[name="cta_source"]').forEach((field) => {
+      field.value = ctaSource;
+    });
     trackMetrikaGoal("lead_form_open", {
       text: opener.textContent.trim(),
+      cta_source: ctaSource,
       page: window.location.pathname
     });
     openModal();
@@ -1600,10 +1709,12 @@ document.querySelectorAll('a[href="#mobile-lead"], a[href="#lead"]').forEach((li
 document.querySelectorAll('a[href*="wa.me"]').forEach((link) => {
   link.addEventListener("click", () => {
     const metrikaClientId = getCachedMetrikaClientId();
+    const ctaSource = link.dataset.ctaSource || "whatsapp";
     updateWhatsappLink(link, metrikaClientId);
     trackMetrikaGoal("whatsapp_click", {
       text: link.textContent.trim(),
       href: link.href,
+      cta_source: ctaSource,
       page: window.location.pathname,
       yandex_client_id: metrikaClientId,
       ...getTrackingParamsObject()
@@ -1624,7 +1735,26 @@ document.querySelectorAll("video").forEach((video, index) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeModal();
+  if (event.key === "Escape") {
+    closeModal();
+    return;
+  }
+
+  if (event.key !== "Tab" || !modal?.classList.contains("is-open")) return;
+  const focusableElements = Array.from(modal.querySelectorAll(
+    'button:not([disabled]), a[href], input:not([disabled]):not([tabindex="-1"]), textarea:not([disabled])'
+  )).filter((element) => element.getClientRects().length > 0);
+  if (!focusableElements.length) return;
+
+  const firstFocusable = focusableElements[0];
+  const lastFocusable = focusableElements[focusableElements.length - 1];
+  if (event.shiftKey && document.activeElement === firstFocusable) {
+    event.preventDefault();
+    lastFocusable.focus();
+  } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+    event.preventDefault();
+    firstFocusable.focus();
+  }
 });
 
 function setScenarioState() {
@@ -1639,33 +1769,52 @@ function setScenarioState() {
 }
 
 setScenarioState();
+scenarioItems.forEach((item) => {
+  item.addEventListener("toggle", () => {
+    if (!mobileScenarioQuery.matches || !item.open) return;
+    scenarioItems.forEach((otherItem) => {
+      if (otherItem !== item) otherItem.removeAttribute("open");
+    });
+  });
+});
 if (typeof mobileScenarioQuery.addEventListener === "function") {
   mobileScenarioQuery.addEventListener("change", setScenarioState);
 } else if (typeof mobileScenarioQuery.addListener === "function") {
   mobileScenarioQuery.addListener(setScenarioState);
 }
 
-if (mobileStickyCta && stickyHideTargets.length && "IntersectionObserver" in window) {
-  const visibleLeadSections = new Set();
-  const stickyObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        visibleLeadSections.add(entry.target);
-      } else {
-        visibleLeadSections.delete(entry.target);
-      }
-    });
-    document.body.classList.toggle("sticky-cta-hidden", mobileScenarioQuery.matches && visibleLeadSections.size > 0);
-  }, {
-    rootMargin: "-72px 0px -28% 0px",
-    threshold: 0.08
-  });
+function updateMobileStickyCta() {
+  stickyUpdateFrame = null;
+  if (!mobileStickyCta) return;
 
-  stickyHideTargets.forEach((target) => stickyObserver.observe(target));
-  if (typeof mobileScenarioQuery.addEventListener === "function") {
-    mobileScenarioQuery.addEventListener("change", () => {
-      document.body.classList.toggle("sticky-cta-hidden", mobileScenarioQuery.matches && visibleLeadSections.size > 0);
-    });
+  const headerHeight = header?.getBoundingClientRect().height || 0;
+  const heroActionsRect = heroActions?.getBoundingClientRect();
+  const leadRect = leadSection?.getBoundingClientRect();
+  const heroActionsPassed = heroActionsRect
+    ? heroActionsRect.bottom <= headerHeight + 8
+    : window.scrollY > window.innerHeight * 0.7;
+  const leadIsVisible = leadRect
+    ? leadRect.top < window.innerHeight * 0.88 && leadRect.bottom > headerHeight
+    : false;
+  const overlayIsOpen = Boolean(modal?.classList.contains("is-open") || mobileMenu?.classList.contains("is-open"));
+  const shouldShow = mobileStickyQuery.matches && heroActionsPassed && !leadIsVisible && !overlayIsOpen;
+
+  document.body.classList.toggle("sticky-cta-visible", shouldShow);
+}
+
+function scheduleMobileStickyUpdate() {
+  if (stickyUpdateFrame !== null) return;
+  stickyUpdateFrame = window.requestAnimationFrame(updateMobileStickyCta);
+}
+
+if (mobileStickyCta) {
+  scheduleMobileStickyUpdate();
+  window.addEventListener("scroll", scheduleMobileStickyUpdate, { passive: true });
+  window.addEventListener("resize", scheduleMobileStickyUpdate);
+  if (typeof mobileStickyQuery.addEventListener === "function") {
+    mobileStickyQuery.addEventListener("change", scheduleMobileStickyUpdate);
+  } else if (typeof mobileStickyQuery.addListener === "function") {
+    mobileStickyQuery.addListener(scheduleMobileStickyUpdate);
   }
 }
 
@@ -1674,7 +1823,14 @@ if (menuButton && mobileMenu) {
     const isOpen = mobileMenu.classList.toggle("is-open");
     document.body.classList.toggle("menu-open", isOpen);
     header?.classList.toggle("menu-active", isOpen);
+    scheduleMobileStickyUpdate();
     menuButton.setAttribute("aria-expanded", String(isOpen));
+    menuButton.setAttribute(
+      "aria-label",
+      isOpen
+        ? (currentLanguage === "en" ? "Close menu" : "Закрыть меню")
+        : (currentLanguage === "en" ? "Open menu" : "Открыть меню")
+    );
   });
 
   mobileMenu.addEventListener("click", (event) => {
@@ -1683,6 +1839,8 @@ if (menuButton && mobileMenu) {
       document.body.classList.remove("menu-open");
       header?.classList.remove("menu-active");
       menuButton.setAttribute("aria-expanded", "false");
+      menuButton.setAttribute("aria-label", currentLanguage === "en" ? "Open menu" : "Открыть меню");
+      scheduleMobileStickyUpdate();
     }
   });
 }
@@ -1770,6 +1928,7 @@ leadForms.forEach((leadForm) => {
     data.phone = String(data.phone || "").trim();
     data.interest = String(data.interest || "").trim();
     data.message = String(data.message || "").trim();
+    data.cta_source = String(data.cta_source || "").trim();
     data.contact_company_site = String(data.contact_company_site || "").trim();
     data.website_url = String(data.website_url || "").trim();
 
@@ -1820,7 +1979,7 @@ leadForms.forEach((leadForm) => {
     const attribution = getLeadAttribution(metrikaClientId);
     const lead = {
       ...data,
-      source: "Kean Limassol landing",
+      source: `Kean Limassol landing${data.cta_source ? ` · ${data.cta_source}` : ""}`,
       spamCheck: "passed",
       page: window.location.href,
       yandexClientId: attribution.metrikaClientId,
@@ -1836,6 +1995,7 @@ leadForms.forEach((leadForm) => {
       data.phone ? `${getMessage("contactLabel")}: ${data.phone}` : "",
       data.interest ? `${getMessage("interestLabel")}: ${data.interest}` : "",
       data.message ? `${getMessage("commentLabel")}: ${data.message}` : "",
+      data.cta_source ? `CTA: ${data.cta_source}` : "",
       `${getMessage("pageLabel")}: ${window.location.href}`,
       ...formatAttributionLines(attribution)
     ].filter(Boolean).join("\n");
@@ -1884,6 +2044,7 @@ leadForms.forEach((leadForm) => {
       if (shouldTrackLeadSubmit) {
         trackMetrikaGoal("lead_submit", {
           interest: data.interest,
+          cta_source: data.cta_source,
           form: formType,
           page: window.location.pathname,
           yandex_client_id: attribution.metrikaClientId,
